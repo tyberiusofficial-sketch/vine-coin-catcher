@@ -127,7 +127,7 @@
     if(accFall >= fallSpeedMs){ accFall = 0; moveCoins(); checkCatch(); }
     if(accSpawn >= spawnIntervalMs){ accSpawn = 0; spawnCoin(); }
 
-    const speed = 4;
+    const speed = 6;
     if(keys.left)  mammoth.x -= speed;
     if(keys.right) mammoth.x += speed;
     mammoth.x = Math.max(0, Math.min(W - mammoth.w, mammoth.x));
@@ -183,5 +183,6 @@
   </script>
 </body>
 </html>
+
 
 
