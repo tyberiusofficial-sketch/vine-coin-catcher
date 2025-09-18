@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vine Coin Catcher</title>
+  <style>
+    :root { --w: 800px; --h: 400px; }
+    body { display:grid; place-items:center; min-height:100vh; background:#0a0f14; color:#e7f4ff; font:16px system-ui, sans-serif; }
+    .wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
+    canvas { width:var(--w); height:var(--h); image-rendering: pixelated; border-radius:8px; box-shadow:0 10px 35px rgba(0,0,0,.45); background:#003; }
+    .hud { width:var(--w); display:flex; justify-content:space-between; gap:8px; font-weight:700; }
+    button { padding:.6rem 1rem; border-radius:10px; border:0; background:#1b9c6e; color:white; font-weight:700; cursor:pointer; }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+    a{ color:#9fe2ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud"><div id="score">Score: 0</div><div id="lives">Lives: 3</div></div>
+    <canvas id="game" width="800" height="400"></canvas>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button id="startBtn">Start</button>
+      <small>Controls: ← → keys. Audio starts after you press <b>Start</b>.</small>
+    </div>
+    <small>Vine Coin Catcher • <a href="https://mammobits.com" target="_blank">mammobits.com</a></small>
+  </div>
+
+  <!-- These files must be in the same folder -->
+  <audio id="bgm" src="backgroundmusic.mp3" preload="auto" loop></audio>
+
+  <script>
+  // ==== Config ====
+  const W = 800, H = 400;
+  const COIN_W = 40, COIN_H = 40;
+  const MAM_W = 120, MAM_H = 120;
+  const START_SPEED_MS = 500;
+  const START_SPAWN_MS = 4000;
+  const DIFFICULTY = 0.95;
+  const SNOW_MAX = 140, SNOW_DT = 40;
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const images = {
+    bg: loadImg('background.png'),
+    coin: loadImg('vinecoin.png'),
+    mammoth: loadImg('mammoth.png')
+  };
+  function loadImg(src){ const i = new Image(); i.src = src; return i; }
+
+  let running = false;
+  let score = 0; let lives = 3;
+  let coins = []; let snow = [];
+  let lastTime = 0, accFall = 0, accSpawn = 0, accSnow = 0;
+  let fallSpeedMs = START_SPEED_MS, spawnIntervalMs = START_SPAWN_MS;
+
+  const mammoth = { x: W/2 - MAM_W/2, y: H - MAM_H - 20, w: MAM_W, h: MAM_H };
+
+  const keys = { left:false, right:false };
+  addEventListener('keydown', e=>{
+    if(e.key==='ArrowLeft') keys.left = true;
+    if(e.key==='ArrowRight') keys.right = true;
+  });
+  addEventListener('keyup', e=>{
+    if(e.key==='ArrowLeft') keys.left = false;
+    if(e.key==='ArrowRight') keys.right = false;
+  });
+
+  const scoreEl = document.getElementById('score');
+  const livesEl = document.getElementById('lives');
+  const startBtn = document.getElementById('startBtn');
+  const bgm = document.getElementById('bgm');
+
+  startBtn.onclick = async () => {
+    if(running) return;
+    running = true;
+    score = 0; lives = 3; coins = []; snow = [];
+    fallSpeedMs = START_SPEED_MS; spawnIntervalMs = START_SPAWN_MS;
+    scoreEl.textContent = 'Score: ' + score;
+    livesEl.textContent = 'Lives: ' + lives;
+    try { await bgm.play(); } catch {}
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+  };
+
+  function loop(t){
+    if(!running) return;
+    const dt = t - lastTime; lastTime = t;
+    accFall += dt; accSpawn += dt; accSnow += dt;
+
+    if(accSnow >= SNOW_DT){ accSnow = 0; spawnSnow(); moveSnow(); }
+    if(accFall >= fallSpeedMs){ accFall = 0; moveCoins(); checkCatch(); }
+    if(accSpawn >= spawnIntervalMs){ accSpawn = 0; spawnCoin(); }
+
+    const speed = 4;
+    if(keys.left)  mammoth.x -= speed;
+    if(keys.right) mammoth.x += speed;
+    mammoth.x = Math.max(0, Math.min(W - mammoth.w, mammoth.x));
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function spawnCoin(){ const x = Math.floor(Math.random()*(W-COIN_W-20))+10; coins.push({x,y:40,w:COIN_W,h:COIN_H}); }
+  function moveCoins(){ for(let i=coins.length-1;i>=0;i--){ const c=coins[i]; c.y+=10; if(c.y>H){ coins.splice(i,1); loseLife(); if(lives<=0) return gameOver(); } } }
+  function checkCatch(){ for(let i=coins.length-1;i>=0;i--){ const k=coins[i]; if(aabb(mammoth,k)){ coins.splice(i,1); increaseScore(10); } } }
+  function increaseScore(pts){ score+=pts; scoreEl.textContent='Score: '+score; fallSpeedMs=Math.max(80,Math.floor(fallSpeedMs*DIFFICULTY)); spawnIntervalMs=Math.max(400,Math.floor(spawnIntervalMs*DIFFICULTY)); }
+  function loseLife(){ lives--; livesEl.textContent='Lives: '+lives; }
+  function aabb(a,b){ return !(a.x+a.w<b.x||b.x+b.w<a.x||a.y+a.h<b.y||b.y+b.h<a.y); }
+
+  function spawnSnow(){ if(snow.length>=SNOW_MAX)return; for(let i=0;i<3;i++){ snow.push({ x:Math.random()*W, y:Math.random()*120, s:1, vx:(Math.random()-0.5)*1.2, vy:1.5+Math.random()*1.2 }); } }
+  function moveSnow(){ for(let i=snow.length-1;i>=0;i--){ const f=snow[i]; f.x+=f.vx; f.y+=f.vy; if(f.y>H+4) snow.splice(i,1); } }
+
+  function draw(){ if(images.bg.complete) ctx.drawImage(images.bg,0,0,W,H); ctx.fillStyle='#fff'; for(const f of snow){ctx.fillRect(f.x|0,f.y|0,f.s,f.s);} for(const c of coins){if(images.coin.complete) ctx.drawImage(images.coin,c.x,c.y,COIN_W,COIN_H);} if(images.mammoth.complete) ctx.drawImage(images.mammoth,mammoth.x,mammoth.y,MAM_W,MAM_H); }
+  function gameOver(){ running=false; try{bgm.pause();}catch{}; setTimeout(()=>{ alert(`Game Over!\\nFinal Score: ${score}\\nVisit: mammobits.com`); scoreEl.textContent='Score: 0'; livesEl.textContent='Lives: 3'; },50); }
+  </script>
+</body>
+</html>
